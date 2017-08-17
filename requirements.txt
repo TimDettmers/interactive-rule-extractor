@@ -1,0 +1,3 @@
+pylucene
+pytest
+spacy
