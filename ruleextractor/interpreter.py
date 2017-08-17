@@ -1,5 +1,21 @@
 from ruleextractor.functions import Select, SpacyProcessor
 
+class Block(object):
+    def __init__(self, tokens, ent, pos, dep):
+        self.tokens = tokens
+        self.ent = ent
+        self.pos = pos
+        self.dep = dep
+
+    def __str__(self):
+        return '{0}\n{1}\n{2}\n{3}'.format(self.tokens, self.ent, self.pos, self.dep)
+
+    def __unicode__(self):
+        return unicode(self.__str__())
+
+    def __repr__(self):
+        return self.__str__()
+
 class Interpreter(object):
     def __init__(self, indexer):
         self.funcs = {}
@@ -26,7 +42,7 @@ class Interpreter(object):
             if self.back(command): continue
             if self.push(command): continue
             if self.merge(command): continue
-            if self.merge4(command): continue
+            if self.get_block(command): continue
             if self.check_is_function(command): continue
 
             self.execute_function(command, values)
@@ -40,8 +56,8 @@ class Interpreter(object):
         else:
             return False
 
-    def merge4(self, command):
-        if command == 'merge4':
+    def get_block(self, command):
+        if command == 'block':
             self.do_print = False
             past = self.selection
             self.execute_function('tokenize', '')
@@ -56,22 +72,16 @@ class Interpreter(object):
             self.merge('merge')
 
             if isinstance(past, list):
-                ordered = []
-                print(type(self.selection[0]))
-                print(type(self.selection[1]))
-                print(type(self.selection[2]))
-                print(type(self.selection[3]))
-                print(len(self.selection))
+                blocks = []
                 tokens = self.selection[0]
                 ents = self.selection[1]
                 poss = self.selection[2]
                 deps = self.selection[3]
                 for token, ent, pos, dep in zip(tokens, ents, poss, deps):
-                    ordered.append(token)
-                    ordered.append(ent)
-                    ordered.append(pos)
-                    ordered.append(dep)
-                self.selection = ordered
+                    blocks.append(Block(token, ent, pos, dep))
+                self.selection = blocks
+            else:
+                self.selection = Block(self.selection[0], self.selection[1], self.selection[2], self.selection[3])
 
             self.history_enabled = True
             self.do_print = True
@@ -135,7 +145,7 @@ class Interpreter(object):
     def print_selection(self):
         if self.do_print:
             print('-'*60)
-            if isinstance(self.selection, unicode) or len(self.selection[0]) < 20:
+            if isinstance(self.selection, unicode) or isinstance(self.selection, Block):
                 print(self.selection)
             else:
                 for i, results in enumerate(self.selection):
