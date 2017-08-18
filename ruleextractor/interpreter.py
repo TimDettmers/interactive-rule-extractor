@@ -1,4 +1,6 @@
-from ruleextractor.functions import Select, SpacyProcessor
+from ruleextractor.functions import Select, SpacyProcessor, Masker
+
+import numpy as np
 
 class Block(object):
     def __init__(self, tokens, ent, pos, dep):
@@ -6,9 +8,14 @@ class Block(object):
         self.ent = ent
         self.pos = pos
         self.dep = dep
+        self.arr = np.array([self.tokens, self.ent, self.pos, self.dep], dtype=np.unicode_)
+        self.masked = None
 
     def __str__(self):
-        return '{0}\n{1}\n{2}\n{3}'.format(self.tokens, self.ent, self.pos, self.dep)
+        if self.masked is not None:
+            return str(self.masked)
+        else:
+            return '{0}\n{1}\n{2}\n{3}'.format(self.tokens, self.ent, self.pos, self.dep)
 
     def __unicode__(self):
         return unicode(self.__str__())
@@ -28,6 +35,7 @@ class Interpreter(object):
 
     def init_functions(self, indexer):
         self.funcs['select'] = Select(indexer)
+        self.funcs['mask'] = Masker(indexer)
         self.funcs['tokenize'] = SpacyProcessor(indexer, lambda x: x.text)
         self.funcs['dep'] = SpacyProcessor(indexer, lambda x: x.dep_)
         self.funcs['pos'] = SpacyProcessor(indexer, lambda x: x.pos_)
@@ -39,6 +47,7 @@ class Interpreter(object):
             values = input_value.split(' ')
             command = values[0]
             if self.isdigit(command): continue
+            if self.unmask(command): continue
             if self.back(command): continue
             if self.push(command): continue
             if self.merge(command): continue
@@ -47,6 +56,23 @@ class Interpreter(object):
 
             self.execute_function(command, values)
 
+    def unmask(self, command):
+        if command == 'unmask':
+            if isinstance(self.selection, Block):
+                self.selection.masked = None
+                self.print_selection()
+            elif isinstance(self.selection, list):
+                if isinstance(self.selection[0], Block):
+                    for block in self.selection:
+                        block.masked = None
+                    self.print_selection()
+                else:
+                    print('No block selected, cannot unmask!')
+            else:
+                print('No block selected, cannot unmask!')
+            return True
+        else:
+            return False
 
     def push(self, command):
         if command == 'push':

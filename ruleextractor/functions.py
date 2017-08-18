@@ -1,5 +1,7 @@
 import re
 import spacy
+import ruleextractor
+import numpy as np
 
 nlp = spacy.load('en')
 
@@ -55,3 +57,41 @@ class SpacyProcessor(AbstractFunction):
         pass
 
 
+class Masker(AbstractFunction):
+    def __init__(self, indexer):
+        super(Masker, self).__init__(indexer)
+
+    def parse_args(self, arg_string):
+        return arg_string.split(' ')
+
+    def execute_func(self, arg_string, selection):
+        if not self.check_for_block(selection): return selection
+        mask_values = self.parse_args(arg_string)
+
+        self.apply_mask(selection, mask_values)
+        return selection
+
+    def apply_mask(self, selection, mask_values):
+        if isinstance(selection, list): blocks = selection
+        else: blocks = [selection]
+        for block in blocks:
+            master_mask = np.zeros_like(block.arr[0], dtype=np.int32)
+            for feature in block.arr:
+                for mask_value in mask_values:
+                    mask = mask_value == feature
+                    if np.count_nonzero(mask) > 0:
+                        master_mask += mask
+            master_mask = master_mask > 0
+            master_mask = master_mask.reshape(1, -1)
+            master_mask = np.tile(master_mask, (block.arr.shape[0], 1))
+            block.masked = block.arr[master_mask].reshape(block.arr.shape[0], -1)
+
+    def check_for_block(self, selection):
+        return_value = True
+        if not isinstance(selection, ruleextractor.interpreter.Block):
+            if not isinstance(selection[0], ruleextractor.interpreter.Block):
+                return_value = False
+
+        if not return_value:
+            print('Argument needs to be a block. Call the block command to create a block!')
+        return return_value
