@@ -2,8 +2,23 @@ import re
 import spacy
 import ruleextractor
 import numpy as np
+import dijkstar
+import copy
+
+from dijkstar import Graph, find_path
 
 nlp = spacy.load('en')
+
+
+def check_for_block(selection):
+    return_value = True
+    if not isinstance(selection, ruleextractor.interpreter.Block):
+        if not isinstance(selection[0], ruleextractor.interpreter.Block):
+            return_value = False
+
+    if not return_value:
+        print('Argument needs to be a block. Call the block command to create a block!')
+    return return_value
 
 class AbstractFunction(object):
     def __init__(self, indexer):
@@ -65,7 +80,7 @@ class Masker(AbstractFunction):
         return arg_string.split(' ')
 
     def execute_func(self, arg_string, selection):
-        if not self.check_for_block(selection): return selection
+        if not check_for_block(selection): return selection
         mask_values = self.parse_args(arg_string)
 
         self.apply_mask(selection, mask_values)
@@ -86,12 +101,102 @@ class Masker(AbstractFunction):
             master_mask = np.tile(master_mask, (block.arr.shape[0], 1))
             block.masked = block.arr[master_mask].reshape(block.arr.shape[0], -1)
 
-    def check_for_block(self, selection):
-        return_value = True
-        if not isinstance(selection, ruleextractor.interpreter.Block):
-            if not isinstance(selection[0], ruleextractor.interpreter.Block):
-                return_value = False
 
-        if not return_value:
-            print('Argument needs to be a block. Call the block command to create a block!')
-        return return_value
+
+class PathFinder(AbstractFunction):
+    def __init__(self, indexer):
+        super(PathFinder, self).__init__(indexer)
+
+    def parse_args(self, arg_string):
+        func = lambda x: x
+        args = []
+        values = arg_string.split(' ')
+        if len(values) == 3 and values[1] == 'p':
+            args = [values[0], values[2]]
+            func = self.path_between_words
+        elif values[-1].isdigit():
+            func = self.get_paths_from_words
+            words = values[:-1]
+            path_length = int(values[-1])
+            args = [words, path_length]
+        else:
+            print('Could not parse query!')
+        return func, args
+
+    def get_paths_from_words(self, words, path_length, selection):
+        words = set(words)
+        if isinstance(selection, ruleextractor.interpreter.Block):
+            blocks = [selection]
+        else:
+            blocks = selection
+
+        paths = []
+        for block in blocks:
+            block_paths = []
+            for word in nlp(block.raw_string):
+                if word.text in words:
+                    new_paths = []
+                    _ = self.get_paths_from_word(word, path_length, word.text, new_paths)
+                    block_paths += new_paths
+            paths.append(block_paths)
+        return paths
+
+
+    def get_paths_from_word(self, word, path_length, path_string, path_strings):
+        past = copy.deepcopy(path_string)
+        if path_length == 0:
+            path_strings.append(path_string)
+            return path_string
+        elif len(list(word.children)) == 0:
+            path_strings.append(path_string)
+            return path_string
+        else:
+            for child in word.children:
+                self.get_paths_from_word(child, path_length-1, path_string + '->' + child.text, path_strings)
+        return past
+
+    def path_between_words(self, word1, word2, selection):
+        if isinstance(selection, ruleextractor.interpreter.Block):
+            blocks = [selection]
+        else:
+            blocks = selection
+        paths = []
+        for block in blocks:
+            graph = self.get_graph(block.raw_string)
+            cost_func = lambda u, v, e, prev_e: e['cost']
+            path = (0, 9999)
+            try:
+                result = find_path(graph, word1, word2, cost_func=cost_func)
+                path = result[0]
+                total_cost = result[-1]
+                paths.append(path)
+            except dijkstar.algorithm.NoPathError:
+                print('No path found!')
+                pass
+                paths.append([])
+        return paths
+
+    def get_graph(self, sentence):
+        graph = Graph()
+        todo = set()
+        for word in nlp(sentence):
+            root = word
+            while root.dep_ != 'ROOT':
+                root = root.head
+            todo.add(root)
+
+        todo = list(todo)
+        while len(todo) > 0:
+            child = todo.pop()
+            for word in child.children:
+                graph.add_edge(child.text, word.text, {'cost': 1})
+                graph.add_edge(word.text, child.text, {'cost': 1})
+                todo.append(word)
+        return graph
+
+    def execute_func(self, arg_string, selection):
+        if not check_for_block(selection): return selection
+        func, args = self.parse_args(arg_string)
+        args.append(selection)
+        return func(*args)
+

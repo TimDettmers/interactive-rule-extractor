@@ -1,9 +1,10 @@
-from ruleextractor.functions import Select, SpacyProcessor, Masker
+from ruleextractor.functions import Select, SpacyProcessor, Masker, PathFinder
 
 import numpy as np
 
 class Block(object):
-    def __init__(self, tokens, ent, pos, dep):
+    def __init__(self, raw_string, tokens, ent, pos, dep):
+        self.raw_string = raw_string
         self.tokens = tokens
         self.ent = ent
         self.pos = pos
@@ -36,6 +37,7 @@ class Interpreter(object):
     def init_functions(self, indexer):
         self.funcs['select'] = Select(indexer)
         self.funcs['mask'] = Masker(indexer)
+        self.funcs['path'] = PathFinder(indexer)
         self.funcs['tokenize'] = SpacyProcessor(indexer, lambda x: x.text)
         self.funcs['dep'] = SpacyProcessor(indexer, lambda x: x.dep_)
         self.funcs['pos'] = SpacyProcessor(indexer, lambda x: x.pos_)
@@ -103,11 +105,11 @@ class Interpreter(object):
                 ents = self.selection[1]
                 poss = self.selection[2]
                 deps = self.selection[3]
-                for token, ent, pos, dep in zip(tokens, ents, poss, deps):
-                    blocks.append(Block(token, ent, pos, dep))
+                for i, (token, ent, pos, dep) in enumerate(zip(tokens, ents, poss, deps)):
+                    blocks.append(Block(past[i], token, ent, pos, dep))
                 self.selection = blocks
             else:
-                self.selection = Block(self.selection[0], self.selection[1], self.selection[2], self.selection[3])
+                self.selection = Block(past, self.selection[0], self.selection[1], self.selection[2], self.selection[3])
 
             self.history_enabled = True
             self.do_print = True
