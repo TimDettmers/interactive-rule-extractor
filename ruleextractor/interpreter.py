@@ -1,5 +1,4 @@
-from ruleextractor.functions import Select, SpacyProcessor, Masker, PathFinder
-
+from ruleextractor.functions import Select, SpacyProcessor, Masker, PathFinder, Chunker
 import numpy as np
 
 class Block(object):
@@ -38,6 +37,7 @@ class Interpreter(object):
         self.funcs['select'] = Select(indexer)
         self.funcs['mask'] = Masker(indexer)
         self.funcs['path'] = PathFinder(indexer)
+        self.funcs['chunk'] = Chunker(indexer)
         self.funcs['tokenize'] = SpacyProcessor(indexer, lambda x: x.text)
         self.funcs['dep'] = SpacyProcessor(indexer, lambda x: x.dep_)
         self.funcs['pos'] = SpacyProcessor(indexer, lambda x: x.pos_)
